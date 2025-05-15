@@ -12,7 +12,7 @@ requires-python = ">=3.8" # TODO: check actual requirements
 
 license = { text = "MIT" }
 authors = [
-  { name="sacca97", email="" },
+  { name="sacca97", email="test@email.com" },
 ]
 
 
