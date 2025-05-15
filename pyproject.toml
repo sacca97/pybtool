@@ -1,0 +1,36 @@
+[build-system]
+requires = [ "setuptools>=62.0.0" ]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pybtool"
+version = "0.0.1" # The current version of your package
+description = "TODO"
+
+readme = "README.md" # Path to your README file
+requires-python = ">=3.8" # TODO: check actual requirements
+
+license = { text = "MIT" }
+authors = [
+  { name="sacca97", email="" },
+]
+
+
+dependencies = [ # Runtime dependencies (installed when someone uses your package)
+    "scapy>=2.6.1", # TODO: check actual requirements
+    "cryptography>=44.0.1", # TODO: check actual requirements
+    "asyncio",
+]
+
+# Optional: Define command-line scripts
+# [project.scripts]
+# tool_cli = "tool.cli:main" # Maps 'tool_cli' command to tool.cli.main() function
+
+# Optional: Define other entry points (e.g., for plugins)
+# [project.entry-points]
+# my_plugin = "tool.plugin:PluginClass"
+
+# Optional: Define project URLs (shown on PyPI page)
+# [project.urls]
+# Homepage = "https://github.com/your_username/TOOL"
+# Bug Tracker = "https://github.com/your_username/TOOL/issues"
