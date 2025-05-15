@@ -248,7 +248,7 @@ class Device(ABC):
             HCI_Cmd_Authentication_Requested(handle=self.peer.handle),
         )
         # TODO: pairing should be completed in 2-3 seconds max
-        self.sock.sniff(
+        self.hci_dev.sniff(
             timeout=timeout,
             lfilter=lambda pkt: pairing_handler(pkt),
             stop_filter=lambda pkt: HCI_Event_IO_Capability_Response
