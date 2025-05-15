@@ -102,21 +102,29 @@ class Device(ABC):
         if self.bt_mode in (BT_MODE_BREDR, BT_MODE_DUAL):
             self.send_command(HCI_Cmd_Inquiry(inquiry_length=timeout))
 
-        scan_results = self.hci_dev.sniff(
-            timeout=timeout,
-            prn=lambda pkt: get_adv_info(pkt) if print_info else None,
-            lfilter=lambda pkt: pkt.haslayer(HCI_Event_Inquiry_Result)
-            or pkt.haslayer(HCI_LE_Meta_Advertising_Report),
-            stop_filter=lambda pkt: HCI_Event_Inquiry_Complete in pkt,
-        )
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            pkt = self.hci_dev.recv()
+            addr, bt_type, name = get_adv_info(pkt)
+            if addr is None:
+                continue
+
+            if print_info:
+                print(f"Found device: {addr}, type: {bt_type}, name: {name}")
+
+            if target == addr:
+                if self.bt_mode in (BT_MODE_BLE, BT_MODE_DUAL):
+                    self.send_command(HCI_Cmd_LE_Set_Scan_Enable(enable=0))
+                if self.bt_mode in (BT_MODE_BREDR, BT_MODE_DUAL):
+                    self.send_command(HCI_Cmd_Inquiry_Cancel())
+                return bt_type
+
+            elif HCI_Event_Inquiry_Complete in pkt:
+                break
 
         # Stop BLE scanning, BREDR scanning is stopped automatically
         if self.bt_mode in (BT_MODE_BLE, BT_MODE_DUAL):
             self.send_command(HCI_Cmd_LE_Set_Scan_Enable(enable=0))
-
-        pkts = parse_adv_results(scan_results)
-        if target in pkts:
-            return pkts[target]
 
         return None
 
@@ -135,6 +143,7 @@ class Device(ABC):
             res = self.wait_for_event(HCI_Event_Connection_Complete)
 
         if res is not None:
+            print("Device connected")
             addr = res.bd_addr if HCI_Event_Connection_Complete in res else res.paddr
             self.peer = RemoteDevice(addr=addr, handle=res.handle, connected=True)
             return True
@@ -260,7 +269,7 @@ class Device(ABC):
             return False, None
 
         return True, {
-            "io_capability": io_capabilities.get(
+            "io_capabilities": io_capabilities.get(
                 self.peer.io_capabilities, "NoInputNoOutput"
             ),
             "auth_req": auth_requirements.get(self.peer.auth_requirements),

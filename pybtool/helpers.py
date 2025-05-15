@@ -4,7 +4,6 @@ from scapy.layers.bluetooth import *
 
 
 def get_adv_info(pkt):
-    dev = {}
     if HCI_Event_Inquiry_Result in pkt:
         return (pkt.addr[0], "BREDR", None)
     elif HCI_LE_Meta_Advertising_Report in pkt:
