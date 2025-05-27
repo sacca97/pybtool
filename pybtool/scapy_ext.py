@@ -17,7 +17,7 @@ class BluetoothSocket(BluetoothUserSocket):
     def __init__(self, hci_dev: int = 0):
         if os.getuid() != 0:
             logging.error("Please run as root")
-            sys.exit(0)
+            raise PermissionError("Please run as root")
         try:
             sock = socket.socket(
                 socket.AF_BLUETOOTH, socket.SOCK_RAW, socket.BTPROTO_HCI
@@ -30,7 +30,7 @@ class BluetoothSocket(BluetoothUserSocket):
             logging.info(f"Opened HCI socket on device hci{hci_dev}")
         except BluetoothSocketError as e:
             logging.error(f"This should not happen {e}")
-            sys.exit(0)
+            print(e)
         except OSError as e:
             if e.errno == 19:
                 logging.error(f"Device hci{hci_dev} does not exist.")
@@ -39,7 +39,7 @@ class BluetoothSocket(BluetoothUserSocket):
             else:
                 logging.error(f"Failed to bind device hci{hci_dev}: {e}")
                 sock.close()
-            sys.exit(0)
+            print(e)
 
     def send_command(self, cmd: Packet) -> Packet:
         cmd = HCI_Hdr() / HCI_Command_Hdr() / cmd

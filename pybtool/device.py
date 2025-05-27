@@ -143,7 +143,7 @@ class Device(ABC):
             res = self.wait_for_event(HCI_Event_Connection_Complete)
 
         if res is not None:
-            print("Device connected")
+            logging.info("Device connected")
             addr = res.bd_addr if HCI_Event_Connection_Complete in res else res.paddr
             self.peer = RemoteDevice(addr=addr, handle=res.handle, connected=True)
             return True
@@ -238,11 +238,7 @@ class Device(ABC):
                 self.peer.auth_requirements = pkt.authentication_requirements
 
                 logging.debug(
-                    f"IO Capability: {
-                        io_capabilities.get(pkt.io_capability, 'NoInputNoOutput')
-                    }, Authentication: {
-                        auth_requirements.get(pkt.authentication_requirements)
-                    }"
+                    f"IO Capability: {io_capabilities.get(pkt.io_capability, 'NoInputNoOutput')} Authentication: {auth_requirements.get(pkt.authentication_requirements)}"
                 )
 
             if HCI_Event_Hdr in pkt:
