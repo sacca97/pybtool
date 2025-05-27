@@ -10,6 +10,7 @@ from pybtool.helpers import (
     get_adv_info,
     parse_adv_results,
 )
+from pybtool.smp import SecurityManager
 
 
 class RemoteDevice:
@@ -42,15 +43,17 @@ class Device(ABC):
     peer: RemoteDevice = None
 
     def __init__(
-        self, bt_addr: str = None, bt_mode: int = BT_MODE_DUAL, hci_dev: int = 0
+        self, bt_addr: str = None, role: int = None, bt_mode: int = BT_MODE_DUAL, hci_dev: int = 0
     ):
+        if role is None:
+            return
         self.bt_addr = bt_addr
         self.bt_mode = bt_mode
         self.hci_dev_idx = hci_dev
-        self.hci_dev = None
-        if bt_mode != BT_MODE_BREDR:
-            # Init SMP
-            pass
+        self.hci_dev: BluetoothSocket = None
+        self.sm: SecurityManager = None
+        self.role = role
+ 
 
     def __str__(self):
         return f"Device(bt_addr={self.bt_addr}, bt_mode={self.bt_mode})"
@@ -65,6 +68,9 @@ class Device(ABC):
 
         if self.bt_mode in (BT_MODE_BREDR, BT_MODE_DUAL):
             self.send_command(HCI_Cmd_Write_Simple_Pairing_Mode())
+
+        if self.bt_mode in (BT_MODE_BLE, BT_MODE_DUAL):
+            self.sm = SecurityManager(self.hci_dev, self.role)
 
     def power_off(self):
         """
@@ -270,3 +276,6 @@ class Device(ABC):
             ),
             "auth_req": auth_requirements.get(self.peer.auth_requirements),
         }
+
+    def pair_le(self):
+        self.sm.pair(self.peer.handle)
