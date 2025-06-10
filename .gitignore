@@ -1,3 +1,6 @@
 .testing
 __pycache__
 simola_test.py
+*.egg-info
+bdist*
+build
