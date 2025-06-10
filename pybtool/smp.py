@@ -1,9 +1,9 @@
 import logging
 from typing import Optional, Tuple
 from scapy.layers.bluetooth import *
-from constants import *
+from pybtool.constants import *
 from pybtool.crypto import *
-from helpers import *
+from pybtool.helpers import *
 from pybtool.scapy_ext import BluetoothSocket, SM_Security_Request
 
 
@@ -15,7 +15,6 @@ class SecurityManager:
     preq: bytes
     pres: bytes
     tk: bytes
-
 
     def __init__(self, hci_dev: BluetoothSocket, role: int):
         self.mitm = 0
@@ -83,7 +82,9 @@ class SecurityManager:
             self.preq = pkt
             self.send(handle=handle, pkt=pkt)
         else:
-            self.send(handle=handle, pkt=SM_Security_Request(authentication=self.authreq))
+            self.send(
+                handle=handle, pkt=SM_Security_Request(authentication=self.authreq)
+            )
 
     def set_own_address(self, addr: str, address_type: int):
         addr = addr.replace(":", "")
@@ -124,12 +125,10 @@ class SecurityManager:
             logging.info("Received DHKey Check")
             self.on_dhkey_check(sock, handle, pkt)
 
-    def on_pairing_request(
-        self, pkt: Packet
-    ):
+    def on_pairing_request(self, pkt: Packet):
         if self.role == BLE_ROLE_CENTRAL:
             return
-        
+
         self.preq = pkt.getlayer(SM_Pairing_Request)
         pair_rsp = SM_Pairing_Response(
             authentication=self.authreq,
@@ -159,10 +158,12 @@ class SecurityManager:
             # Need to compute DHKey
             self.send(
                 handle=pkt.handle,
-                pkt=SM_Public_Key(key_x=self.ecc_key.x[::-1], key_y=self.ecc_key.y[::-1]),
+                pkt=SM_Public_Key(
+                    key_x=self.ecc_key.x[::-1], key_y=self.ecc_key.y[::-1]
+                ),
             )
 
-            self.send(handle=pkt.handle, pkt = self.make_pairing_confirm())
+            self.send(handle=pkt.handle, pkt=self.make_pairing_confirm())
 
     def make_pairing_confirm(self):
         self.r = r()
@@ -227,9 +228,9 @@ class SecurityManager:
         self.eb = f6(mac_key, self.nb, self.na, ra, io_cap_b, b, a)
 
         if self.role == BLE_ROLE_CENTRAL:
-            self.send( handle=pkt.handle, pkt=SM_DHKey_Check(dhkey_check=self.ea))
+            self.send(handle=pkt.handle, pkt=SM_DHKey_Check(dhkey_check=self.ea))
         else:
-            self.send( handle=pkt.handle, pkt=SM_Random(random=self.r))
+            self.send(handle=pkt.handle, pkt=SM_Random(random=self.r))
 
     def on_dhkey_check(self, pkt: Packet):
         expected = self.eb if self.role == BLE_ROLE_CENTRAL else self.ea
@@ -240,14 +241,18 @@ class SecurityManager:
 
         if self.role == BLE_ROLE_CENTRAL:
             # Central starts encryption
-            self.hci_dev.send_command(HCI_Cmd_LE_Enable_Encryption(
+            self.hci_dev.send_command(
+                HCI_Cmd_LE_Enable_Encryption(
                     handle=pkt.handle,
                     ltk=self.ltk,
-                ))
+                )
+            )
         else:
             # Peripheral sends dhkey check and waits for controller to ask for LTK
             self.send(handle=pkt.handle, pkt=SM_DHKey_Check(dhkey_check=self.eb))
             cmd = self.hci_dev.wait_event(HCI_LE_Meta_Long_Term_Key_Request)
             assert self.ltk is not None
-            self.hci_dev.send_command(HCI_Cmd_LE_Long_Term_Key_Request_Reply(handle=cmd.handle, ltk=self.ltk))
+            self.hci_dev.send_command(
+                HCI_Cmd_LE_Long_Term_Key_Request_Reply(handle=cmd.handle, ltk=self.ltk)
+            )
             logging.info("Pairing complete")
