@@ -65,12 +65,13 @@ class BluetoothSocket(BluetoothUserSocket):
                 return None
 
     def wait_event(self, evts: list[Packet], timeout: int = 5):
+        event_filter = lambda pkt: HCI_Event_Hdr in pkt and any(
+            evt in pkt for evt in evts
+        )
         pkt = self.sniff(
             timeout=timeout,
-            lfilter=lambda pkt: HCI_Event_Hdr in pkt
-            and any(evt in pkt for evt in evts),
-            stop_filter=lambda pkt: HCI_Event_Hdr in pkt
-            and any(evt in pkt for evt in evts),
+            lfilter=event_filter,
+            stop_filter=event_filter,
         )
         if len(pkt) == 0:
             # We timed out

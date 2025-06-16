@@ -92,9 +92,12 @@ class Device(ABC):
             self.hci_dev = None
             self.hci_dev_idx = -1
 
-    def send_command(self, cmd: Packet) -> Packet:
+    def send_command(self, cmd: Packet, rsp: Packet = None) -> Packet:
         if self.hci_dev:
-            return self.hci_dev.send_command(cmd)
+            if rsp is None:
+                return self.hci_dev.send_command(cmd)
+            else:
+                return self.wait_for_event([rsp])
 
         logging.error("HCI device is not initialized.")
 
@@ -174,7 +177,6 @@ class Device(ABC):
         )
 
         if res is not None:
-            print("Device connected")
             addr = res.bd_addr if HCI_Event_Connection_Complete in res else res.paddr
             self.peer = RemoteDevice(addr=addr, handle=res.handle, connected=True)
             self.peer.bt_type = (
@@ -190,8 +192,10 @@ class Device(ABC):
             logging.debug("Device is not connected")
             return True
 
-        self.send_command(HCI_Cmd_Disconnect(handle=self.peer.handle))
-        pkt = self.wait_for_event(HCI_Event_Disconnection_Complete)
+        pkt = self.send_command(
+            HCI_Cmd_Disconnect(handle=self.peer.handle),
+            rsp=HCI_Event_Disconnection_Complete,
+        )
         if pkt is None:
             logging.debug("Disconnection failed")
             return False
@@ -207,10 +211,10 @@ class Device(ABC):
             logging.debug("Device is not connected")
             return []
 
-        self.send_command(
+        pkt = self.send_command(
             HCI_Cmd_Read_Remote_Supported_Features(connection_handle=self.peer.handle),
+            rsp=HCI_Event_Read_Remote_Supported_Features_Complete,
         )
-        pkt = self.wait_for_event(HCI_Event_Read_Remote_Supported_Features_Complete)
 
         if pkt is None:
             return []
@@ -220,12 +224,12 @@ class Device(ABC):
         if "extended_features" not in features:
             return features
 
-        self.send_command(
+        pkt = self.send_command(
             HCI_Cmd_Read_Remote_Extended_Features(
                 connection_handle=self.peer.handle, page_number=0x01
             ),
+            rsp=HCI_Event_Read_Remote_Extended_Features_Complete,
         )
-        pkt = self.wait_for_event(HCI_Event_Read_Remote_Extended_Features_Complete)
         features += extract_features(pkt, page=1)
 
         # TODO: check if we need to read page 2
@@ -240,10 +244,10 @@ class Device(ABC):
         if self.peer.bt_type == BT_MODE_BLE:
             return 0.0, "Unknown"
 
-        self.send_command(
+        pkt = self.send_command(
             HCI_Cmd_Read_Remote_Version_Information(connection_handle=self.peer.handle),
+            rsp=HCI_Event_Read_Remote_Version_Information_Complete,
         )
-        pkt = self.wait_for_event(HCI_Event_Read_Remote_Version_Information_Complete)
         if pkt is None:
             return None, None
 
@@ -330,7 +334,3 @@ class Device(ABC):
             else ble_authreq(self.peer.auth_requirements),
             "max_key_size": self.peer.max_key_size,
         }
-
-    def pair_le(self):
-        self.sm.pair(self.peer.handle)
-        # TODO: handle pairing process
