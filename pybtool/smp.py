@@ -77,13 +77,13 @@ class SecurityManager:
         self.complete = complete
         if self.role == BLE_ROLE_CENTRAL:
             pkt = SM_Pairing_Request(
+                max_key_size=self.ltk_size,
                 authentication=self.authreq,
                 initiator_key_distribution=0x01,
                 responder_key_distribution=0x01,
             )
             self.preq = pkt
             self.send(handle=handle, pkt=pkt)
-            print("Sent Pairing Request")
         else:
             self.send(
                 handle=handle, pkt=SM_Security_Request(authentication=self.authreq)

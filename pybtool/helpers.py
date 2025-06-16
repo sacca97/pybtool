@@ -5,12 +5,21 @@ from scapy.layers.bluetooth import *
 
 def get_adv_info(pkt):
     if HCI_Event_Inquiry_Result in pkt:
-        return (pkt.addr[0], "BREDR", None)
+        return (pkt.addr[0], "BREDR", None, None)
     elif HCI_LE_Meta_Advertising_Report in pkt:
         pkt = pkt[HCI_LE_Meta_Advertising_Report]
-        return (pkt.addr), "BLE", get_name_from_adv(pkt)
+        return (pkt.addr), "BLE", get_name_from_adv(pkt), get_manufacturer_info(pkt)
 
-    return None, None, None
+    return None, None, None, None
+
+
+def get_manufacturer_info(pkt: HCI_LE_Meta_Advertising_Report) -> dict:
+    if pkt.len > 0:
+        # Check if the packet has manufacturer specific data
+        manuf_data = [itm for itm in pkt.data if EIR_Manufacturer_Specific_Data in itm]
+        if len(manuf_data) > 0:
+            return manuf_data[0].company_id
+    return None
 
 
 def get_name_from_adv(pkt: HCI_LE_Meta_Advertising_Report) -> str:

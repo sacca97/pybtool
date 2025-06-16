@@ -123,7 +123,6 @@ class Device(ABC):
         """
         Scan for devices. If target is specified, returns the target info if found, None otherwise.
         """
-
         if self.bt_mode in (BT_MODE_BLE, BT_MODE_DUAL):
             self.send_command(HCI_Cmd_LE_Set_Scan_Parameters(type=0))
             self.send_command(HCI_Cmd_LE_Set_Scan_Enable(enable=1, filter_dups=1))
@@ -134,19 +133,21 @@ class Device(ABC):
         start_time = time.time()
         while time.time() - start_time < timeout:
             pkt = self.hci_dev.recv()
-            addr, bt_type, name = get_adv_info(pkt)
+            addr, bt_type, name, manuf = get_adv_info(pkt)
             if addr is None:
                 continue
 
             if print_info:
-                print(f"Found device: {addr}, type: {bt_type}, name: {name}")
+                print(
+                    f"{addr}, {bt_type}, {name or 'no name'}, {bt_manufacturer_table.get(manuf, 'Unknown')}"
+                )
 
             if target == addr:
                 if self.bt_mode in (BT_MODE_BLE, BT_MODE_DUAL):
                     self.send_command(HCI_Cmd_LE_Set_Scan_Enable(enable=0))
                 if self.bt_mode in (BT_MODE_BREDR, BT_MODE_DUAL):
                     self.send_command(HCI_Cmd_Inquiry_Cancel())
-                return bt_type
+                return bt_type  # TODO: return name and manuf as well
 
             elif HCI_Event_Inquiry_Complete in pkt:
                 break
@@ -171,8 +172,10 @@ class Device(ABC):
             self.send_command(HCI_Cmd_Create_Connection(bd_addr=addr))
             res = self.wait_for_event(HCI_Event_Connection_Complete)
 
+        print(f"Connecting to {addr} with type {bt_type}")
+
         if res is not None:
-            logging.info("Device connected")
+            print("Device connected")
             addr = res.bd_addr if HCI_Event_Connection_Complete in res else res.paddr
             self.peer = RemoteDevice(addr=addr, handle=res.handle, connected=True)
             self.peer.bt_type = bt_type
@@ -196,6 +199,9 @@ class Device(ABC):
         return True
 
     def get_remote_features(self):
+        if self.peer.bt_type == BT_MODE_BLE:
+            return []
+
         if self.peer is None or not self.peer.connected:
             logging.debug("Device is not connected")
             return []
@@ -229,6 +235,9 @@ class Device(ABC):
         if self.peer is None or not self.peer.connected:
             logging.debug("Device is not connected")
             return None, None
+
+        if self.peer.bt_type == BT_MODE_BLE:
+            return 0.0, "Unknown"
 
         self.send_command(
             HCI_Cmd_Read_Remote_Version_Information(connection_handle=self.peer.handle),
@@ -295,7 +304,6 @@ class Device(ABC):
                 HCI_Cmd_Authentication_Requested(handle=self.peer.handle),
             )
         else:
-            print("Starting BLE pairing")
             self.sm.set_peer_address(self.peer.addr, 0x01)
             self.sm.pair(self.peer.handle, complete=False)
 
@@ -316,7 +324,9 @@ class Device(ABC):
                 self.peer.io_capabilities, "NoInputNoOutput"
             ),
             # TODO: add BLE logic
-            "auth_req": auth_requirements.get(self.peer.auth_requirements),
+            "auth_req": auth_requirements.get(self.peer.auth_requirements)
+            if self.peer.bt_type == BT_MODE_BREDR
+            else ble_authreq(self.peer.auth_requirements),
             "max_key_size": self.peer.max_key_size,
         }
 
