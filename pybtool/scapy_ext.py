@@ -64,11 +64,13 @@ class BluetoothSocket(BluetoothUserSocket):
                 logging.error(f"Unknown HCI command: {cmd.lastlayer()}")
                 return None
 
-    def wait_event(self, evt: Packet, timeout: int = 5):
+    def wait_event(self, evts: list[Packet], timeout: int = 5):
         pkt = self.sniff(
             timeout=timeout,
-            lfilter=lambda pkt: HCI_Event_Hdr in pkt and evt in pkt,
-            stop_filter=lambda pkt: HCI_Event_Hdr in pkt and evt in pkt,
+            lfilter=lambda pkt: HCI_Event_Hdr in pkt
+            and any(evt in pkt for evt in evts),
+            stop_filter=lambda pkt: HCI_Event_Hdr in pkt
+            and any(evt in pkt for evt in evts),
         )
         if len(pkt) == 0:
             # We timed out
@@ -79,7 +81,7 @@ class BluetoothSocket(BluetoothUserSocket):
 
         if "status" in pkt.fields_desc:
             if pkt.status != 0:
-                logging.error(f"Command failed {evt} with status {pkt.status}")
+                logging.error(f"Command failed {pkt} with status {pkt.status}")
                 return None
 
         return pkt
