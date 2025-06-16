@@ -98,12 +98,12 @@ class Device(ABC):
 
         logging.error("HCI device is not initialized.")
 
-    def wait_for_event(self, event: int, timeout: int = 5) -> Packet:
+    def wait_for_event(self, events: list[Packet], timeout: int = 5) -> Packet:
         """
         Wait for an event from the device.
         """
         if self.hci_dev:
-            return self.hci_dev.wait_event(event, timeout)
+            return self.hci_dev.wait_event(events, timeout)
 
         logging.error("HCI device is not initialized.")
 
@@ -158,27 +158,28 @@ class Device(ABC):
 
         return None
 
-    def connect(self, addr: str, addr_type: int = 1, bt_type: int = BT_MODE_BREDR):
+    def connect(self, addr: str, addr_type: int = 1, bt_type: int = BT_MODE_DUAL):
         """
         Connect to a remote device.
         """
-        res = None
-        if bt_type == BT_MODE_BLE:
+        if bt_type in (BT_MODE_BLE, BT_MODE_DUAL):
             self.send_command(
                 HCI_Cmd_LE_Create_Connection(paddr=addr, patype=addr_type)
             )
-            res = self.wait_for_event(HCI_LE_Meta_Connection_Complete)
-        elif bt_type == BT_MODE_BREDR:
+        elif bt_type == (BT_MODE_BREDR, BT_MODE_DUAL):
             self.send_command(HCI_Cmd_Create_Connection(bd_addr=addr))
-            res = self.wait_for_event(HCI_Event_Connection_Complete)
 
-        print(f"Connecting to {addr} with type {bt_type}")
+        res = self.wait_for_event(
+            [HCI_LE_Meta_Connection_Complete, HCI_Event_Connection_Complete]
+        )
 
         if res is not None:
             print("Device connected")
             addr = res.bd_addr if HCI_Event_Connection_Complete in res else res.paddr
             self.peer = RemoteDevice(addr=addr, handle=res.handle, connected=True)
-            self.peer.bt_type = bt_type
+            self.peer.bt_type = (
+                BT_MODE_BLE if HCI_LE_Meta_Connection_Complete in res else BT_MODE_BREDR
+            )
             return True
 
         logging.warning(f"Connection timed out {addr}")
