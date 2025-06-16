@@ -2,6 +2,7 @@ import fcntl
 import logging
 import os
 import sys
+import time
 from scapy.packet import *
 from scapy.fields import *
 from scapy.layers.bluetooth import *
@@ -43,7 +44,6 @@ class BluetoothSocket(BluetoothUserSocket):
 
     def send_l2cap(self, handle: int, cid: int, cmd: Packet):
         self.send(HCI_Hdr() / HCI_ACL_Hdr(handle=handle) / L2CAP_Hdr(cid=cid) / cmd)
-
 
     def send_command(self, cmd: Packet) -> Packet:
         cmd = HCI_Hdr() / HCI_Command_Hdr() / cmd
@@ -203,6 +203,7 @@ class SDP_Error_Response(Packet):
             },
         )
     ]
+
 
 # HCI Commands
 bind_layers(HCI_Command_Hdr, HCI_Cmd_Write_Simple_Pairing_Mode, ogf=0x03, ocf=0x0056)

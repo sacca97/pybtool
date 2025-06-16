@@ -17,6 +17,33 @@ io_capabilities = {
     0x03: "NoInputNoOutput",
 }
 
+
+def ble_authreq(authreq: int) -> str:
+    bond = (authreq >> 0) & 1
+    mitm = (authreq >> 2) & 1
+    sc = (authreq >> 3) & 1
+    keypress = (authreq >> 4) & 1
+
+    authreqs = [
+        "Bonding",
+        "MITM Protection",
+        "SC",
+        "Keypress Notifications",
+    ]
+
+    res = ""
+    if not bond:
+        authreqs[0] = "No Bonding"
+    if not mitm:
+        authreqs[1] = "No MITM"
+    if not sc:
+        authreqs[2] = "LSC"
+    if not keypress:
+        authreqs[3] = "No Keypress Notifications"
+
+    return ", ".join(authreqs)
+
+
 auth_requirements = {
     0x00: "MITM Not Required",
     0x01: "MITM Required, No Bonding",

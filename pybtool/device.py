@@ -26,6 +26,8 @@ class RemoteDevice:
         self.features = []
         self.version = None
         self.manufacturer = None
+        self.bt_type = None
+        self.max_key_size = 16  # Default value, can be changed after pairing
 
     def __eq__(self, other):
         if not isinstance(other, RemoteDevice):
@@ -43,7 +45,11 @@ class Device(ABC):
     peer: RemoteDevice = None
 
     def __init__(
-        self, bt_addr: str = None, role: int = None, bt_mode: int = BT_MODE_DUAL, hci_dev: int = 0
+        self,
+        bt_addr: str = None,
+        role: int = None,
+        bt_mode: int = BT_MODE_DUAL,
+        hci_dev: int = 0,
     ):
         if role is None:
             return
@@ -53,7 +59,6 @@ class Device(ABC):
         self.hci_dev: BluetoothSocket = None
         self.sm: SecurityManager = None
         self.role = role
- 
 
     def __str__(self):
         return f"Device(bt_addr={self.bt_addr}, bt_mode={self.bt_mode})"
@@ -66,11 +71,17 @@ class Device(ABC):
         self.send_command(HCI_Cmd_Reset())
         self.send_command(HCI_Cmd_Set_Event_Mask())
 
+        self.bt_addr = self.get_local_bd_addr()
+        if self.bt_addr is None:
+            return
+        logging.info(f"Local Bluetooth address: {self.bt_addr}")
+
         if self.bt_mode in (BT_MODE_BREDR, BT_MODE_DUAL):
             self.send_command(HCI_Cmd_Write_Simple_Pairing_Mode())
 
         if self.bt_mode in (BT_MODE_BLE, BT_MODE_DUAL):
             self.sm = SecurityManager(self.hci_dev, self.role)
+            self.sm.set_own_address(self.bt_addr, 0x00)  # Public address
 
     def power_off(self):
         """
@@ -95,6 +106,18 @@ class Device(ABC):
             return self.hci_dev.wait_event(event, timeout)
 
         logging.error("HCI device is not initialized.")
+
+    def get_local_bd_addr(self) -> str:
+        """
+        Get the local Bluetooth address.
+        """
+        if self.hci_dev:
+            pkt = self.send_command(HCI_Cmd_Read_BD_Addr())
+            if pkt is not None:
+                return pkt.addr
+
+        logging.error("HCI device is not initialized or BD_ADDR not found.")
+        return None
 
     def scan(self, target: str = None, timeout: int = 5, print_info: bool = False):
         """
@@ -152,6 +175,7 @@ class Device(ABC):
             logging.info("Device connected")
             addr = res.bd_addr if HCI_Event_Connection_Complete in res else res.paddr
             self.peer = RemoteDevice(addr=addr, handle=res.handle, connected=True)
+            self.peer.bt_type = bt_type
             return True
 
         logging.warning(f"Connection timed out {addr}")
@@ -223,9 +247,21 @@ class Device(ABC):
             bt_manufacturer_table[pkt.manufacturer_name],
         )
 
-    # Only for BREDR
-    def pair(self, timeout: int = 5):
-        def pairing_handler(pkt: Packet):
+    def pairing_handler(self, pkt: Packet):
+        is_hci_evt = HCI_Event_Hdr in pkt
+        is_acl_pkt = HCI_ACL_Hdr in pkt
+
+        if self.peer.bt_type == BT_MODE_BLE and is_acl_pkt:
+            pkt = self.sm.on_message_rx(pkt)
+            if pkt is not None:
+                self.peer.io_capabilities = pkt.iocap
+                self.peer.auth_requirements = pkt.authentication
+                self.peer.max_key_size = pkt.max_key_size
+                print(
+                    f"IO Capability: {io_capabilities.get(pkt.iocap, 'NoInputNoOutput')} Authentication: {ble_authreq(pkt.authentication)}"
+                )
+
+        elif self.peer.bt_type == BT_MODE_BREDR and is_hci_evt:
             if HCI_Event_Link_Key_Request in pkt:
                 self.send_command(
                     HCI_Cmd_Link_Key_Request_Negative_Reply(bd_addr=pkt.bd_addr),
@@ -247,23 +283,28 @@ class Device(ABC):
                     f"IO Capability: {io_capabilities.get(pkt.io_capability, 'NoInputNoOutput')} Authentication: {auth_requirements.get(pkt.authentication_requirements)}"
                 )
 
-            if HCI_Event_Hdr in pkt:
-                return True
-            return False
+        return is_hci_evt or is_acl_pkt
 
+    def pair(self, timeout: int = 5):
         if self.peer is None or not self.peer.connected:
             logging.info("Device is not connected")
             return False, None
 
-        self.send_command(
-            HCI_Cmd_Authentication_Requested(handle=self.peer.handle),
-        )
+        if self.peer.bt_type == BT_MODE_BREDR:
+            self.send_command(
+                HCI_Cmd_Authentication_Requested(handle=self.peer.handle),
+            )
+        else:
+            print("Starting BLE pairing")
+            self.sm.set_peer_address(self.peer.addr, 0x01)
+            self.sm.pair(self.peer.handle, complete=False)
+
         # TODO: pairing should be completed in 2-3 seconds max
         self.hci_dev.sniff(
             timeout=timeout,
-            lfilter=lambda pkt: pairing_handler(pkt),
-            stop_filter=lambda pkt: HCI_Event_IO_Capability_Response
-            in pkt,  # TODO: change this
+            lfilter=lambda pkt: self.pairing_handler(pkt),
+            stop_filter=lambda pkt: HCI_Event_IO_Capability_Response in pkt
+            or SM_Public_Key in pkt,  # TODO: change this
             store=False,
         )
         if self.peer.io_capabilities is None:
@@ -279,3 +320,4 @@ class Device(ABC):
 
     def pair_le(self):
         self.sm.pair(self.peer.handle)
+        # TODO: handle pairing process

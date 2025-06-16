@@ -8,7 +8,6 @@ from pybtool.scapy_ext import BluetoothSocket, SM_Security_Request
 
 
 class SecurityManager:
-
     ea: bytes
     eb: bytes
     ltk: bytes
@@ -32,6 +31,8 @@ class SecurityManager:
         self.dhkey = None
         self.ltk = None
         self.confirm_value = 0
+
+        self.complete = True  # Testing flag, set to false to not complete pairing
 
         self.ia = bytes(6)  # Initiator address
         self.ra = bytes(6)  # Responder address
@@ -72,7 +73,8 @@ class SecurityManager:
     def send(self, handle: int, pkt: Packet):
         self.hci_dev.send_l2cap(handle=handle, cid=BLE_L2CAP_CID_SM, cmd=SM_Hdr() / pkt)
 
-    def pair(self, handle: int):
+    def pair(self, handle: int, complete: bool = True):
+        self.complete = complete
         if self.role == BLE_ROLE_CENTRAL:
             pkt = SM_Pairing_Request(
                 authentication=self.authreq,
@@ -81,6 +83,7 @@ class SecurityManager:
             )
             self.preq = pkt
             self.send(handle=handle, pkt=pkt)
+            print("Sent Pairing Request")
         else:
             self.send(
                 handle=handle, pkt=SM_Security_Request(authentication=self.authreq)
@@ -105,25 +108,28 @@ class SecurityManager:
             self.ia = bytes.fromhex(addr)
             self.iat = address_type
 
-    def on_message_rx(self, sock: BluetoothUserSocket, handle: int, pkt: Packet):
+    def on_message_rx(self, pkt: Packet):
         if SM_Pairing_Request in pkt:
-            logging.info("Received Pairing Request")
-            self.on_pairing_request(sock, handle, pkt)
+            print("Received Pairing Request")
+            self.on_pairing_request(pkt)
         elif SM_Pairing_Response in pkt:
-            logging.info("Received Pairing Response")
-            self.on_pairing_response(sock, handle, pkt)
+            print("Received Pairing Response")
+            return self.on_pairing_response(pkt)
         elif SM_Public_Key in pkt:
-            logging.info("Received Public Key")
-            self.on_public_key(sock, handle, pkt)
+            print("Received Public Key")
+            if self.complete:
+                self.on_public_key(pkt)
+            else:
+                return
         elif SM_Confirm in pkt:
             logging.info("Received Confirm")
-            self.on_confirm(sock, handle, pkt)
+            self.on_confirm(pkt)
         elif SM_Random in pkt:
             logging.info("Received Random")
-            self.on_pairing_random(sock, handle, pkt)
+            self.on_pairing_random(pkt)
         elif SM_DHKey_Check in pkt:
             logging.info("Received DHKey Check")
-            self.on_dhkey_check(sock, handle, pkt)
+            self.on_dhkey_check(pkt)
 
     def on_pairing_request(self, pkt: Packet):
         if self.role == BLE_ROLE_CENTRAL:
@@ -147,9 +153,9 @@ class SecurityManager:
             handle=pkt.handle,
             pkt=SM_Public_Key(key_x=self.ecc_key.x[::-1], key_y=self.ecc_key.y[::-1]),
         )
+        return self.pres
 
     def on_public_key(self, pkt: Packet):
-
         self.peer_public_key_x = pkt.key_x
         self.peer_public_key_y = pkt.key_y
 
