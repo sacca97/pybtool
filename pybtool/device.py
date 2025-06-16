@@ -27,7 +27,7 @@ class RemoteDevice:
         self.version = None
         self.manufacturer = None
         self.bt_type = None
-        self.max_key_size = 16  # Default value, can be changed after pairing
+        self.max_key_size = -1
 
     def __eq__(self, other):
         if not isinstance(other, RemoteDevice):
@@ -315,7 +315,9 @@ class Device(ABC):
             "io_capabilities": io_capabilities.get(
                 self.peer.io_capabilities, "NoInputNoOutput"
             ),
+            # TODO: add BLE logic
             "auth_req": auth_requirements.get(self.peer.auth_requirements),
+            "max_key_size": self.peer.max_key_size,
         }
 
     def pair_le(self):
