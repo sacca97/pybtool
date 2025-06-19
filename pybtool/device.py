@@ -169,7 +169,7 @@ class Device(ABC):
             self.send_command(
                 HCI_Cmd_LE_Create_Connection(paddr=addr, patype=addr_type)
             )
-        elif bt_type == (BT_MODE_BREDR, BT_MODE_DUAL):
+        elif bt_type in (BT_MODE_BREDR, BT_MODE_DUAL):
             self.send_command(HCI_Cmd_Create_Connection(bd_addr=addr))
 
         res = self.wait_for_event(
