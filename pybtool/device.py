@@ -68,13 +68,13 @@ class Device(ABC):
         Power on the device.
         """
         self.hci_dev = BluetoothSocket(self.hci_dev_idx)
-        self.send_command(HCI_Cmd_Reset())
-        self.send_command(HCI_Cmd_Set_Event_Mask())
 
         self.bt_addr = self.get_local_bd_addr()
         if self.bt_addr is None:
             return
-        logging.info(f"Local Bluetooth address: {self.bt_addr}")
+
+        self.send_command(HCI_Cmd_Reset())
+        self.send_command(HCI_Cmd_Set_Event_Mask())
 
         if self.bt_mode in (BT_MODE_BREDR, BT_MODE_DUAL):
             self.send_command(HCI_Cmd_Write_Simple_Pairing_Mode())
@@ -88,6 +88,7 @@ class Device(ABC):
         Power off the device.
         """
         if self.hci_dev:
+            self.disconnect()
             self.hci_dev.close()
             self.hci_dev = None
             self.hci_dev_idx = -1
@@ -166,17 +167,19 @@ class Device(ABC):
         Connect to a remote device.
         """
         if bt_type in (BT_MODE_BLE, BT_MODE_DUAL):
+            # self.send_command(HCI_Cmd_LE_Set_Scan_Enable(enable=0))
             self.send_command(
                 HCI_Cmd_LE_Create_Connection(paddr=addr, patype=addr_type)
             )
-        elif bt_type in (BT_MODE_BREDR, BT_MODE_DUAL):
+        if bt_type in (BT_MODE_BREDR, BT_MODE_DUAL):
+            # self.send_command(HCI_Cmd_Inquiry_Cancel())
             self.send_command(HCI_Cmd_Create_Connection(bd_addr=addr))
 
         res = self.wait_for_event(
             [HCI_LE_Meta_Connection_Complete, HCI_Event_Connection_Complete]
         )
 
-        if res is not None:
+        if res is not None and res.status == 0:
             addr = res.bd_addr if HCI_Event_Connection_Complete in res else res.paddr
             self.peer = RemoteDevice(addr=addr, handle=res.handle, connected=True)
             self.peer.bt_type = (

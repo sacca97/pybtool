@@ -16,31 +16,37 @@ SDP_PUBLIC_BROWSE_GROUP = 0x1002
 
 class BluetoothSocket(BluetoothUserSocket):
     def __init__(self, hci_dev: int = 0):
-        if os.getuid() != 0:
-            logging.error("Please run as root")
-            raise PermissionError("Please run as root")
-        try:
-            sock = socket.socket(
-                socket.AF_BLUETOOTH, socket.SOCK_RAW, socket.BTPROTO_HCI
-            )
-            sock.bind((hci_dev,))
-            fcntl.ioctl(sock.fileno(), HCI_DEV_DOWN, hci_dev)
-            sock.close()
+        self.logger = logging.getLogger(self.__class__.__name__)
 
-            super().__init__(hci_dev)
-            logging.info(f"Opened HCI socket on device hci{hci_dev}")
-        except BluetoothSocketError as e:
-            logging.error(f"This should not happen {e}")
-            print(e)
-        except OSError as e:
-            if e.errno == 19:
-                logging.error(f"Device hci{hci_dev} does not exist.")
-            elif e.errno == 16:
-                logging.error(f"Device hci{hci_dev} is busy.")
-            else:
-                logging.error(f"Failed to bind device hci{hci_dev}: {e}")
+        flag = False
+
+        while not flag:
+            if os.getuid() != 0:
+                self.logger.error("Please run as root")
+                raise PermissionError("Please run as root")
+            try:
+                sock = socket.socket(
+                    socket.AF_BLUETOOTH, socket.SOCK_RAW, socket.BTPROTO_HCI
+                )
+                sock.bind((hci_dev,))
+                fcntl.ioctl(sock.fileno(), HCI_DEV_DOWN, hci_dev)
                 sock.close()
-            print(e)
+
+                super().__init__(hci_dev)
+                self.logger.debug(f"Opened HCI socket on device hci{hci_dev}")
+                flag = True
+                break
+            # except BluetoothSocketError as e:
+            #     self.logger.error(f"This should not happen {e}")
+            except OSError as _:
+                # if e.errno == 19:
+                #     self.logger.error(f"Device hci{hci_dev} does not exist.")
+                # elif e.errno == 16:
+                #     self.logger.error(f"Device hci{hci_dev} is busy.")
+                # else:
+                #     self.logger.error(f"Failed to bind device hci{hci_dev}: {e}")
+                sock.close()
+            time.sleep(1)
 
     def send_l2cap(self, handle: int, cid: int, cmd: Packet):
         self.send(HCI_Hdr() / HCI_ACL_Hdr(handle=handle) / L2CAP_Hdr(cid=cid) / cmd)
@@ -54,14 +60,14 @@ class BluetoothSocket(BluetoothUserSocket):
             if r.type == 0x04 and r.code == 0xE and r.opcode == opcode:
                 if r.status == 0:
                     return r
-                logging.error(
+                self.logger.error(
                     f"Command failed {cmd.lastlayer()} with status {r.status}"
                 )
                 return None
             elif r.type == 0x04 and r.code == 0x0F:
                 if r.status == 0:
                     return r
-                logging.error(f"Unknown HCI command: {cmd.lastlayer()}")
+                self.logger.error(f"Unknown HCI command: {cmd.lastlayer()}")
                 return None
 
     def wait_event(self, evts: list[Packet], timeout: int = 5):
@@ -82,7 +88,7 @@ class BluetoothSocket(BluetoothUserSocket):
 
         if "status" in pkt.fields_desc:
             if pkt.status != 0:
-                logging.error(f"Command failed {pkt} with status {pkt.status}")
+                self.logger.error(f"Command failed {pkt} with status {pkt.status}")
                 return None
 
         return pkt
