@@ -28,6 +28,7 @@ class RemoteDevice:
         self.manufacturer = None
         self.bt_type = None
         self.max_key_size = -1
+        self.sc = True
 
     def __eq__(self, other):
         if not isinstance(other, RemoteDevice):
@@ -301,6 +302,8 @@ class Device(ABC):
                 logging.debug(
                     f"IO Capability: {io_capabilities.get(pkt.io_capability, 'NoInputNoOutput')} Authentication: {auth_requirements.get(pkt.authentication_requirements)}"
                 )
+            elif HCI_Event_Pin_Code_Request in pkt:
+                self.peer.sc = False  # TODO test with a legacy device
 
         return is_hci_evt or is_acl_pkt
 
@@ -333,6 +336,7 @@ class Device(ABC):
             "io_capabilities": io_capabilities.get(
                 self.peer.io_capabilities, "NoInputNoOutput"
             ),
+            "sc": self.peer.sc,
             # TODO: add BLE logic
             "auth_req": auth_requirements.get(self.peer.auth_requirements)
             if self.peer.bt_type == BT_MODE_BREDR
