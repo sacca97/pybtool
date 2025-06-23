@@ -276,9 +276,9 @@ class Device(ABC):
                 self.peer.io_capabilities = pkt.iocap
                 self.peer.auth_requirements = pkt.authentication
                 self.peer.max_key_size = pkt.max_key_size
-                print(
-                    f"IO Capability: {io_capabilities.get(pkt.iocap, 'NoInputNoOutput')} Authentication: {ble_authreq(pkt.authentication)}"
-                )
+                # print(
+                #     f"IO Capability: {io_capabilities.get(pkt.iocap, 'NoInputNoOutput')} Authentication: {ble_authreq(pkt.authentication)}"
+                # )
 
         elif self.peer.bt_type == BT_MODE_BREDR and is_hci_evt:
             if HCI_Event_Link_Key_Request in pkt:
