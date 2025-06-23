@@ -94,10 +94,10 @@ class Device(ABC):
 
     def send_command(self, cmd: Packet, rsp: Packet = None) -> Packet:
         if self.hci_dev:
-            if rsp is None:
-                return self.hci_dev.send_command(cmd)
-            else:
+            cmd_status = self.hci_dev.send_command(cmd)
+            if rsp is not None:
                 return self.wait_for_event([rsp])
+            return cmd_status
 
         logging.error("HCI device is not initialized.")
 
@@ -212,7 +212,9 @@ class Device(ABC):
             return []
 
         pkt = self.send_command(
-            HCI_Cmd_Read_Remote_Supported_Features(connection_handle=self.peer.handle),
+            cmd=HCI_Cmd_Read_Remote_Supported_Features(
+                connection_handle=self.peer.handle
+            ),
             rsp=HCI_Event_Read_Remote_Supported_Features_Complete,
         )
 
