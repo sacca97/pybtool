@@ -36,7 +36,8 @@ class BluetoothSocket(BluetoothUserSocket):
                 self.logger.debug(f"Opened HCI socket on device hci{hci_dev}")
                 flag = True
                 break
-            # except BluetoothSocketError as e:
+            except BluetoothSocketError as _:
+                pass
             #     self.logger.error(f"This should not happen {e}")
             except OSError as _:
                 # if e.errno == 19:
